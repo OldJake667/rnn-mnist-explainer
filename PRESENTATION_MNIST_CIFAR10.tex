@@ -1,0 +1,498 @@
+\documentclass{beamer}
+\usetheme{Madrid}
+\usecolortheme{default}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{booktabs}
+
+\title{RNNs and Backpropagation}
+\subtitle{How This Model Reads a Sequence and Learns from Loss}
+\author{}
+\date{}
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}{RNN Process}
+\small
+The RNN path in this project is:
+
+\vspace{0.2cm}
+
+\begin{center}
+\texttt{image sequence -> RNN loop -> final memory -> digit scores}
+\end{center}
+
+\vspace{0.25cm}
+
+\begin{itemize}
+    \item The image is treated like a sequence of input steps.
+    \item The RNN reads one step at a time.
+    \item It keeps a memory called the hidden state.
+    \item After the last step, that memory is used to predict the digit.
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Step 1: Input Shape}
+\small
+In \texttt{model/model.py}, the model starts with:
+
+\vspace{0.15cm}
+
+\begin{verbatim}
+B, L, C = inputs.shape
+\end{verbatim}
+
+\vspace{0.2cm}
+
+\begin{center}
+\begin{tabular}{l l}
+\toprule
+Name & Meaning \\
+\midrule
+\texttt{B} & batch size: how many images \\
+\texttt{L} & sequence length: how many steps \\
+\texttt{C} & channels: numbers per step \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+For grayscale MNIST, each pixel step usually has one brightness value, so \texttt{C = 1}.
+\end{frame}
+
+\begin{frame}[fragile]{Step 2: Put Sequence First}
+\small
+The input starts as:
+
+\vspace{0.15cm}
+
+\begin{center}
+\texttt{[batch, length, channels]}
+\end{center}
+
+\vspace{0.15cm}
+
+Then the code changes it:
+
+\begin{verbatim}
+inputs = inputs.transpose(0, 1)
+\end{verbatim}
+
+\vspace{0.15cm}
+
+Now it is:
+
+\begin{center}
+\texttt{[length, batch, channels]}
+\end{center}
+
+This makes it easy for the RNN to read step 1, then step 2, then step 3.
+\end{frame}
+
+\begin{frame}[fragile]{Step 3: Start with Empty Memory}
+\small
+Before reading the sequence, the RNN creates the first hidden state:
+
+\vspace{0.15cm}
+
+\begin{verbatim}
+state = self.cell.default_state(inputs[0], max_batch_size)
+\end{verbatim}
+
+\vspace{0.2cm}
+
+\begin{center}
+\texttt{state = empty memory}
+\end{center}
+
+\vspace{0.2cm}
+
+At the beginning, the RNN has not seen any pixels yet, so its memory starts as zeros.
+\end{frame}
+
+\begin{frame}[fragile]{Step 4: Loop Through the Sequence}
+\small
+In \texttt{model/rnn.py}, the RNN reads one input step at a time:
+
+\vspace{0.15cm}
+
+\begin{verbatim}
+for input in torch.unbind(inputs, dim=0):
+    output, new_state = self.cell.forward(input, state)
+    state = new_state
+\end{verbatim}
+
+\vspace{0.2cm}
+
+\begin{center}
+\texttt{current step + old memory -> new memory}
+\end{center}
+
+\vspace{0.15cm}
+
+This is the main RNN idea: the next step depends on what the model already remembers.
+\end{frame}
+
+\begin{frame}[fragile]{Step 5: Update the Memory}
+\small
+The actual memory update happens in \texttt{model/rnncell.py}:
+
+\vspace{0.15cm}
+
+\begin{verbatim}
+hidden_preact = self.W_hx(input) + self.W_hh(h)
+hidden = self.hidden_activation_fn(hidden_preact)
+
+return hidden, hidden
+\end{verbatim}
+
+\vspace{0.15cm}
+
+\begin{itemize}
+    \item \texttt{self.W\_hx(input)} looks at the current input step.
+    \item \texttt{self.W\_hh(h)} looks at the previous memory.
+    \item The activation turns the combined value into the new memory.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Step 6: What the Activation Does}
+\small
+The activation is applied after input information and memory information are added.
+
+\vspace{0.2cm}
+
+\begin{center}
+\texttt{new memory = activation(input part + memory part)}
+\end{center}
+
+\vspace{0.2cm}
+
+\begin{itemize}
+    \item It turns raw numbers into hidden-state values.
+    \item It makes the model nonlinear, so it can learn shapes and patterns.
+    \item It controls how strongly each memory feature turns on or off.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Why \texttt{tanh}?}
+\small
+Vanilla RNNs often use \texttt{tanh} for the hidden activation.
+
+\vspace{0.2cm}
+
+\begin{center}
+\texttt{large negative -> near -1}
+
+\texttt{0 -> 0}
+
+\texttt{large positive -> near 1}
+\end{center}
+
+\vspace{0.2cm}
+
+\begin{itemize}
+    \item It keeps memory values between \texttt{-1} and \texttt{1}.
+    \item It is centered around zero.
+    \item It allows negative, positive, and neutral memory values.
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Step 7: Use the Final Memory}
+\small
+After all input steps are read, \texttt{model/model.py} keeps the final state:
+
+\vspace{0.15cm}
+
+\begin{verbatim}
+_, state = self.rnn(inputs, init_state=initial_state,
+                    return_output=False)
+state = self.rnn.output(state)
+return self.output_mlp(state)
+\end{verbatim}
+
+\vspace{0.2cm}
+
+\begin{center}
+\texttt{final memory -> output layer -> 10 digit scores}
+\end{center}
+
+So the RNN summarizes the image first, then the classifier predicts the digit.
+\end{frame}
+
+\begin{frame}{From Pixels to Features}
+\small
+The model does not jump directly from pixels to the answer.
+
+\vspace{0.25cm}
+
+\begin{center}
+\texttt{784 pixel brightness values -> 256 features -> 10 scores}
+\end{center}
+
+\vspace{0.25cm}
+
+\begin{itemize}
+    \item The 256 features are learned numbers that summarize the image.
+    \item \texttt{256} comes from \texttt{hidden\_size: 256}.
+    \item If \texttt{hidden\_size} were \texttt{64}, the model would use 64 features.
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Final Output Layer}
+\small
+In \texttt{model/model.py}, the final output layer is built here:
+
+\vspace{0.15cm}
+
+\begin{verbatim}
+backbone_output_size = self.rnn.output_size()
+sizes = [backbone_output_size] + output_hiddens + [output_size]
+self.output_mlp = nn.Sequential(
+    *[nn.Linear(sizes[i], sizes[i+1])
+      for i in range(len(sizes)-1)]
+)
+\end{verbatim}
+
+\vspace{0.15cm}
+
+For MNIST with \texttt{hidden\_size = 256}, this becomes:
+
+\begin{center}
+\texttt{nn.Linear(256, 10)}
+\end{center}
+\end{frame}
+
+\begin{frame}{Linear Layer Meaning}
+\small
+A linear layer combines features with learned weights:
+
+\[
+\text{scores} = \text{features} \times W + b
+\]
+
+\vspace{0.15cm}
+
+\begin{center}
+\begin{tabular}{l l}
+\toprule
+Part & Shape \\
+\midrule
+\texttt{features} & \texttt{(256)} \\
+\texttt{W} conceptually & \texttt{(256, 10)} \\
+\texttt{b} & \texttt{(10)} \\
+\texttt{scores} & \texttt{(10)} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+PyTorch stores the linear weight as \texttt{(10, 256)}, but the idea is the same.
+\end{frame}
+
+\begin{frame}[fragile]{Batch, X, Y, and Training Step}
+\small
+\begin{center}
+\begin{tabular}{l l}
+\toprule
+Name & Meaning \\
+\midrule
+\texttt{batch\_x} & input images as pixel sequences \\
+\texttt{batch\_y} & correct digit labels \\
+\texttt{out} & model output scores \\
+\texttt{loss} & how wrong the scores are \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\vspace{0.15cm}
+
+\begin{verbatim}
+batch_x, batch_y, *len_batch = batch
+out = self.model(batch_x, len_batch)
+loss = self.dataset.loss(out, batch_y, len_batch)
+return loss
+\end{verbatim}
+\end{frame}
+
+\begin{frame}{Forward Pass and Output Scores}
+\small
+The forward pass means the model makes a prediction using its current weights.
+
+\vspace{0.25cm}
+
+\begin{center}
+\texttt{pixels -> model -> 10 digit scores}
+\end{center}
+
+\vspace{0.25cm}
+
+Suppose the image shows the digit \texttt{3}:
+
+\vspace{0.15cm}
+
+\begin{center}
+\begin{tabular}{c c c c c c c c c c}
+0 & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8 & 9 \\
+\midrule
+0.1 & 0.2 & -0.5 & 5.0 & 0.0 & -1.0 & 0.3 & 0.4 & -0.7 & 0.2
+\end{tabular}
+\end{center}
+
+The highest score is for digit \texttt{3}, so the model predicts \texttt{3}.
+\end{frame}
+
+\begin{frame}{Weights for Digit 3}
+\small
+Each digit score is a weighted combination of the 256 features.
+
+\[
+\text{score for 3}
+=
+f_1w_1 + f_2w_2 + \cdots + f_{256}w_{256} + b
+\]
+
+\vspace{0.2cm}
+
+\begin{itemize}
+    \item The weights connected to \texttt{score\_3} are the weights for digit \texttt{3}.
+    \item At first, these weights are random.
+    \item During training, they become useful for making images of \texttt{3} produce high \texttt{score\_3}.
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{How Digit 3 Is Learned}
+\small
+Suppose the image is actually a \texttt{3}:
+
+\begin{center}
+\texttt{batch\_x = image pixels}, \qquad \texttt{batch\_y = 3}
+\end{center}
+
+If the model predicts \texttt{7}, then \texttt{score\_7} is too high,
+\texttt{score\_3} is too low, and the loss becomes high.
+
+\vspace{0.15cm}
+
+\begin{verbatim}
+out = self.model(batch_x, len_batch)
+loss = self.dataset.loss(out, batch_y, len_batch)
+return loss
+\end{verbatim}
+
+Backpropagation uses this loss to change the weights a little.
+\end{frame}
+
+\begin{frame}{Repeated Learning}
+\small
+One example changes the weights only a little.
+
+\vspace{0.25cm}
+
+\begin{center}
+\texttt{pixels -> scores -> loss -> gradients -> update}
+\end{center}
+
+\vspace{0.25cm}
+
+\begin{itemize}
+    \item After many images of \texttt{3}, \texttt{score\_3} becomes better for digit \texttt{3}.
+    \item After many images of other digits, the model learns when not to make \texttt{score\_3} high.
+    \item Learning happens over many batches and epochs.
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Loss}
+\small
+Loss is one number that says how wrong the model is.
+
+\begin{itemize}
+    \item Low loss means the prediction is good.
+    \item High loss means the prediction is bad.
+    \item For MNIST, this project uses cross entropy loss.
+\end{itemize}
+
+\vspace{0.15cm}
+
+\begin{verbatim}
+class MulticlassClassification(Task):
+    @staticmethod
+    def loss(logits, y, len_batch=None):
+        return F.cross_entropy(logits, y)
+\end{verbatim}
+\end{frame}
+
+\begin{frame}{Chain Rule and Backpropagation}
+\small
+Backpropagation uses the chain rule to calculate gradients.
+
+\[
+\frac{dL}{dx}
+=
+\frac{dL}{dy}
+\times
+\frac{dy}{dx}
+\]
+
+\vspace{0.15cm}
+
+For a model:
+
+\[
+\text{weight} \rightarrow \text{feature} \rightarrow \text{score} \rightarrow \text{loss}
+\]
+
+\[
+\frac{dLoss}{dWeight}
+=
+\frac{dLoss}{dScore}
+\times
+\frac{dScore}{dFeature}
+\times
+\frac{dFeature}{dWeight}
+\]
+\end{frame}
+
+\begin{frame}{Backward Pass}
+\small
+The backward pass starts from the loss and moves backward through the model.
+
+\vspace{0.25cm}
+
+\begin{center}
+\texttt{loss -> scores -> features -> weights}
+\end{center}
+
+\vspace{0.25cm}
+
+\begin{itemize}
+    \item It uses the chain rule.
+    \item It calculates gradients for the weights.
+    \item This is backpropagation.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Weight Update}
+\large
+\[
+\text{new weight}
+=
+\text{old weight}
+-
+\text{learning rate}
+\times
+\text{gradient}
+\]
+
+\vspace{0.35cm}
+
+\normalsize
+\begin{itemize}
+    \item Backpropagation calculates gradients.
+    \item The optimizer uses gradients to update weights.
+    \item The new weight can become smaller or larger.
+    \item The goal is smaller loss, not smaller weights.
+\end{itemize}
+\end{frame}
+
+\end{document}
