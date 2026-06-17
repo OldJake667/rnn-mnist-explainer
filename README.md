@@ -1,18 +1,14 @@
 # RNN and MNIST Explainer
 
-Presentation materials explaining sequence modeling ideas through MNIST/CIFAR-style neural network experiments.
+This repository contains a short presentation I made while learning and explaining neural network models for image and sequence tasks. It connects basic classification experiments with the larger question of how recurrent and sequence models process information over time.
 
-## Overview
-
-This small repository contains the slide deck used to present the experimental setup and intuition behind recurrent neural networks, image classification baselines, and sequence modeling comparisons.
-
-## My Work
-
-- Prepared the presentation source in LaTeX Beamer.
-- Summarized the motivation, setup, and results for MNIST/CIFAR-style experiments.
-- Produced a compiled PDF version for sharing.
+The slides were written in LaTeX Beamer and exported as a PDF so they can be viewed directly from GitHub.
 
 ## Files
 
-- `PRESENTATION_MNIST_CIFAR10.tex` - presentation source
-- `PRESENTATION_MNIST_CIFAR10.pdf` - compiled slide deck
+- `PRESENTATION_MNIST_CIFAR10.tex` is the Beamer source.
+- `PRESENTATION_MNIST_CIFAR10.pdf` is the compiled slide deck.
+
+## Why I Made This
+
+I used this presentation to organize the ideas behind MNIST/CIFAR-style experiments, recurrent models, and the intuition needed before moving into more advanced sequence-model benchmarks.
